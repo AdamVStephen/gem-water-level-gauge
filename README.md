@@ -19,11 +19,12 @@ Inspired by http://brelovich.se/2011/09/water-level-sensor-arduino-ethernet/
 
 |Item|Specific Component|Source|Cost|
 |----|------|----|---|
-|Pressure sensor|MPX5010DP|Farnell|£9.10|
+|Pressure sensor|MPX5010DP|CPC|£13.49|
 |Arduino MC|TBA|TBA|£?|
 |16x2 LCD|TBA|TBA|£?|
 |8x8 LED|TBA|TBA|£?|
 |7 Segment Display|TBA|TBA|TBA|
 |USB to TTL Cable|TBA|TBA|TBA|
+|Pipes|||
 
 
