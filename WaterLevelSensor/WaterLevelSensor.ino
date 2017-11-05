@@ -1,9 +1,9 @@
-
 /**
   WaterLevelSensor.ino, Adam Stephen, https://github.com/AdamVStephen/arduino
-
   git clone git@github.com:AdamVStephen/arduino
 */
+
+char release[] = "1.3.0"; // TODO : git commit/release process to populate this field.
 
 // TODO: avoid memory writes if unnecessary.
 // Add a Serial 'z' : to zero the statistics.
@@ -21,7 +21,7 @@ enum Config {
   MAX_DELAY_MS = 1000000
 };
 
-#define LED_IF_ENABLED 1
+#define LED_IF_ENABLED 0
 #define LCD_IF_ENABLED 1
 #define UDP_IF_ENABLED 0
 
@@ -174,6 +174,7 @@ warblesnook();
 #include <LiquidCrystal.h>
 
 int trace = 0;
+int simulation = 0;
 
 #if UDP_IF_ENABLED
 // Enter a MAC address and IP address for your controller below.
@@ -212,6 +213,17 @@ int32_t delay_time = 0;
 char msgPrefix[5][7] = { "LOLO ", "LO ", "NORMAL", "HI", "HIHI" };
 byte nWarnLevel = 0;
 
+enum AlarmStatus {
+  ALARM_DISABLED = 0,
+  ALARM_ASSERT = 1,
+  ALARM_FLASH = 2
+};
+
+int loloEnabled = ALARM_FLASH;
+int loEnabled = ALARM_FLASH;
+int hiEnabled = ALARM_FLASH;
+int hihiEnabled = ALARM_FLASH;
+
 enum Warnlevel {
   LEVEL_LOLO = 0,
   LEVEL_LO = 1,
@@ -230,6 +242,16 @@ unsigned int nSerialBufPos = 0;
 // SO : only support changing parameters infrequently !
 //
 // Takes 3.3ms per write()
+
+#define EEPROM_OFFSET_TLOLO 0
+#define EEPROM_OFFSET_TLO 2
+#define EEPROM_OFFSET_THI 4
+#define EEPROM_OFFSET_THIHI 6
+#define EEPROM_OFFSET_DELAY 8
+#define EEPROM_OFFSET_ELOLO 12
+#define EEPROM_OFFSET_ELO 14
+#define EEPROM_OFFSET_EHI 16
+#define EEPROM_OFFSET_EHIHI 18
 
 void writeInt16 (uint16_t nAddress, int16_t nData) {
   //Write 2 bytes to EEPROM, starting at the given address.
@@ -287,6 +309,8 @@ int32_t readInt32 (uint32_t nAddress) {
 void uptime() {
   Serial.print("Uptime(ms): ");
   Serial.println(millis());
+  Serial.print("Release :");
+  Serial.println(release);
 }
 
 #if DEBUG
@@ -361,6 +385,10 @@ const float G_ACC = 9.81;
 // Density of water
 const float RHO_WATER = 1000.0;
 
+const char * s_assert = "assert";
+const char * s_disabled = "disable";
+const char * s_flash = "flash";
+
 float digitalToVout(long d) {
   return (VCC * d) / 1023.0;
 }
@@ -408,16 +436,16 @@ char serbuf[50];
 
 void serialHelp() {
   Serial.println("");
-  Serial.println ("*****************************************");
-  Serial.println ("* Serial Interface to WaterLevelMonitor *");
-  Serial.println ("*                                       *");
-  Serial.println ("* Adam Stephen, Infinnovation Ltd.      *");
-  Serial.println ("*                                       *");
-  Serial.println ("* (g)et level                           *");
-  Serial.println ("* (s)et (l)evel|(d)elay value           *");
-  Serial.println ("* (t)race toggle                        *");
-  Serial.println ("* (r)eset board                         *");
-  Serial.println ("*                                       *");
+  //Serial.println ("*****************************************");
+  //Serial.println ("* Serial Interface to WaterLevelMonitor *");
+  //Serial.println ("*                                       *");
+  Serial.println (F("* Adam Stephen, Infinnovation Ltd.      *"));
+  Serial.println (F("*                                       *"));
+  Serial.println (F("* (g)et level                           *"));
+  Serial.println (F("* (s)et (l)evel|(d)elay value           *"));
+  Serial.println (F("* (t)race toggle                        *"));
+  Serial.println (F("* (r)eset board                         *"));
+  Serial.println (F("*                                       *"));
   //Serial.println ("* Set thresholds for level alarms       *");
   //Serial.println ("*                                       *");
   //Serial.println ("* [s level value]                       *");
@@ -432,7 +460,7 @@ void serialHelp() {
   //Serial.println ("*                                       *");
   //Serial.println ("* Get level [LlhHa] as a bove, a = all  *");
   //Serial.println ("*                                       *");
-  Serial.println ("*****************************************");
+  //Serial.println ("*****************************************");
   Serial.println("");
 }
 
@@ -442,10 +470,12 @@ void parseSerial () {
   // Parse and handle communication on the serial port.
   // This function is at the end of the loop.
   char c;
+  
   while (Serial.available()) {
     c = Serial.read();
     if (c == 0xD) {
       //Carriage return. Do something with the input
+      // Buffer has 3 elements : cmd space arg
       if (nSerialBufPos >= 3) {
         if (serialBuf[0] == 's' && serialBuf[1] == ' ') {
           //Set Command
@@ -460,37 +490,77 @@ void parseSerial () {
                 nTmp = atoi(&serialBuf[4]);
                 tLoLo = constrain(nTmp, LEVEL_CM_MIN_THRESHOLD, LEVEL_CM_MAX_THRESHOLD);
                 // what does atoi return in the case of illegal input ?
-                writeInt16 (0, tLoLo);
+                writeInt16 (EEPROM_OFFSET_TLOLO, tLoLo);
                 Serial.print (" LOLO set to: ");
                 Serial.println (tLoLo);
                 break;
               case 'l':
                 nTmp = atoi(&serialBuf[4]);
                 tLo = constrain(nTmp, LEVEL_CM_MIN_THRESHOLD, LEVEL_CM_MAX_THRESHOLD);
-                writeInt16 (2, tLo);
+                writeInt16 (EEPROM_OFFSET_TLO, tLo);
                 Serial.print (" LO set to: ");
                 Serial.println (tLo);
                 break;
               case 'h':
                 nTmp = atoi(&serialBuf[4]);
                 tHi = constrain(nTmp, LEVEL_CM_MIN_THRESHOLD, LEVEL_CM_MAX_THRESHOLD);
-                writeInt16 (4, tHi);
+                writeInt16 (EEPROM_OFFSET_THI, tHi);
                 Serial.print (" HI set to: ");
                 Serial.println (tHi);
                 break;
               case 'H':
                 nTmp = atoi(&serialBuf[4]);
                 tHiHi = constrain(nTmp, LEVEL_CM_MIN_THRESHOLD, LEVEL_CM_MAX_THRESHOLD);
-                writeInt16 (6, tHiHi);
-                Serial.print (" HIHI set to: ");
+                writeInt16 (EEPROM_OFFSET_THIHI, tHiHi);
+                Serial.print (" HIHI set: ");
                 Serial.println (tHiHi);
                 break;
               case 'd':
                 dTmp = atoi(&serialBuf[4]);
                 delay_time = constrain(dTmp, 0, MAX_DELAY_MS);
-                writeInt32 (8, delay_time);
-                Serial.print ("Delay time set to : ");
+                writeInt32 (EEPROM_OFFSET_DELAY, delay_time);
+                Serial.print ("Delay time set: ");
                 Serial.println (delay_time);
+                break;
+            }
+          }
+        } else if (serialBuf[0] == 'e' && serialBuf[1] == ' ') {
+          //Set Command
+          if (nSerialBufPos < 5 || serialBuf[3] != ' ') {
+            Serial.println ("Wrong format for enable command");
+          } else {
+            int16_t nTmp = 0;
+            int32_t dTmp = 0;
+            // TODO
+            switch (serialBuf[2]) {
+              case 'L':
+                nTmp = atoi(&serialBuf[4]);
+                loloEnabled = constrain(nTmp, ALARM_DISABLED, ALARM_FLASH);
+                // what does atoi return in the case of illegal input ?
+                writeInt16 (EEPROM_OFFSET_ELOLO, loloEnabled);
+                Serial.print (" LOLO enable: ");
+                Serial.println (loloEnabled);
+                break;
+              case 'l':
+                nTmp = atoi(&serialBuf[4]);
+                loEnabled = constrain(nTmp, ALARM_DISABLED, ALARM_FLASH);
+                writeInt16 (EEPROM_OFFSET_ELO, loEnabled);
+                Serial.print (" LO enable : ");
+                Serial.println (loEnabled);
+                break;
+              case 'h':
+                nTmp = atoi(&serialBuf[4]);
+                hiEnabled = constrain(nTmp,ALARM_DISABLED, ALARM_FLASH) ;
+                writeInt16 (EEPROM_OFFSET_EHI, hiEnabled);
+                Serial.print (" HI enable: ");
+                Serial.println (hiEnabled);
+                break;
+              case 'H':
+                nTmp = atoi(&serialBuf[4]);
+                hihiEnabled = constrain(nTmp, ALARM_DISABLED, ALARM_FLASH);
+                writeInt16 (EEPROM_OFFSET_EHI, hihiEnabled);
+                Serial.print (" HIHI enable: ");
+                Serial.println (hihiEnabled);
                 break;
             }
           }
@@ -499,26 +569,80 @@ void parseSerial () {
           switch (serialBuf[2]) {
             case 'L':
               sprintf(serbuf, ">> LOLO set to : %d", tLoLo); Serial.println (serbuf);
+              sprintf(serbuf, ">> LOLO alarm is");
+              switch (loloEnabled) {
+                case ALARM_DISABLED:
+                sprintf(serbuf, s_disabled); Serial.println(serbuf);
+                break;
+                case ALARM_ASSERT:
+                sprintf(serbuf, s_assert); Serial.println(serbuf);
+                break;
+                case ALARM_FLASH:
+                sprintf(serbuf, s_flash); Serial.println(serbuf);
+                break;
+              }
               break;
             case 'l':
               sprintf(serbuf, ">> LO set to : %d", tLo); Serial.println (serbuf);
+              sprintf(serbuf, ">> LO alarm status is");
+              switch (loEnabled) {
+                case ALARM_DISABLED:
+                sprintf(serbuf, s_disabled); Serial.println(serbuf);
+                break;
+                case ALARM_ASSERT:
+                sprintf(serbuf, s_assert); Serial.println(serbuf);
+                break;
+                case ALARM_FLASH:
+                sprintf(serbuf, s_flash); Serial.println(serbuf);
+                break;
+              }
               break;
             case 'h':
               sprintf(serbuf, ">> HI set to : %d", tHi); Serial.println (serbuf);
+              sprintf(serbuf, ">> HI alarm status is");
+              switch (hiEnabled) {
+                case ALARM_DISABLED:
+                sprintf(serbuf, s_disabled); Serial.println(serbuf);
+                break;
+                case ALARM_ASSERT:
+                sprintf(serbuf, s_assert); Serial.println(serbuf);
+                break;
+                case ALARM_FLASH:
+                sprintf(serbuf, s_flash); Serial.println(serbuf);
+                break;
+              }
               break;
             case 'H':
               sprintf(serbuf, ">> HIHI set to : %d", tHiHi); Serial.println (serbuf);
+              sprintf(serbuf, ">> HIHI alarm status is");
+              switch (hihiEnabled) {
+                case ALARM_DISABLED:
+                sprintf(serbuf, s_disabled); Serial.println(serbuf);
+                break;
+                case ALARM_ASSERT:
+                sprintf(serbuf, s_assert); Serial.println(serbuf);
+                break;
+                case ALARM_FLASH:
+                sprintf(serbuf, s_flash); Serial.println(serbuf);
+                break;
+              }
               break;
             default:
-              sprintf(serbuf, ">> LOLO set to : %d", tLoLo); Serial.println (serbuf);
-              sprintf(serbuf, ">> LO set to : %d", tLo); Serial.println (serbuf);
-              sprintf(serbuf, ">> HI set to : %d", tHi); Serial.println (serbuf);
-              sprintf(serbuf, ">> HIHI set to : %d", tHiHi); Serial.println (serbuf);
+              sprintf(serbuf, ">> LOLO set to : %d mode %d", tLoLo, loloEnabled); Serial.println (serbuf);
+              sprintf(serbuf, ">> LO set to : %d mode %d", tLo, loEnabled); Serial.println (serbuf);
+              sprintf(serbuf, ">> HI set to : %d mode %d", tHi,hiEnabled); Serial.println (serbuf);
+              sprintf(serbuf, ">> HIHI set to : %d mode %d", tHiHi, hihiEnabled); Serial.println (serbuf);
               sprintf(serbuf, ">> delay_time set to : %d", delay_time); Serial.println (serbuf);
               break;
           }
-        } else if (serialBuf[0] == 't') {
-          trace = 1 - trace;
+        }
+      } else {
+	// Fewer than 3 characters
+	if (serialBuf[0] == 't') {
+	  trace = 1 - trace;
+        } else if (serialBuf[0] == 'z') {
+          simulation = 1 - simulation;
+          Serial.println("Toggle simulation to %d"); Serial.println(simulation);
         } else if (serialBuf[0] == 'r') {
           resetFunc();
         } else if (serialBuf[0] == 'u') {
@@ -529,9 +653,6 @@ void parseSerial () {
           Serial.println (serialBuf[0]);
           serialHelp();
         }
-      } else {
-        Serial.println ("Unknown command (too short)");
-        serialHelp();
       }
       // Empty the buffer
       nSerialBufPos = 0;
@@ -629,6 +750,7 @@ byte level_08[8] = {31, 31, 31, 31, 31, 31, 31, 31};
 
 //char topTitle[] = "H20 (cm) :";
 char topTitle[] = "Water cm :";
+char simTitle[] = "SimMode  :";
 int topTitleLen = String(topTitle).length();
 
 int pressureBar(int d) {
@@ -687,13 +809,38 @@ int hav = 0;
 */
 char dbugbuf[50];
 
+void render_alarm(char * alarmtext, AlarmStatus status) {
 
+  if (status == ALARM_DISABLED) {
+    return;
+  } else if (status == ALARM_ASSERT) {
+    lcd.setCursor(0, 1);
+    lcd.print(alarmtext);
+    delay(3000);
+    lcd.setCursor(0, 1);
+    lcd.print("                ");
+    delay(1000);
+  } else if (status == ALARM_FLASH) {
+    for (int w = 0; w < 3; w++) { 
+        lcd.setCursor(0, 1);
+        lcd.print(alarmtext);
+        delay(1000);
+        lcd.setCursor(0, 1);
+        lcd.print("                ");
+        delay(1000);
+      }
+  }
+}
 
 void lcd_interface(int v_adc, int loops) {
 
   int h = digitalToLevelCentimeters(v_adc);
   lcd.setCursor(0, 0);
-  sprintf(lcdbuf0, "%s%02d", topTitle, h);
+  if (simulation) {
+    sprintf(lcdbuf0, "%s%02d", simTitle, h);
+  } else {
+    sprintf(lcdbuf0, "%s%02d", topTitle, h);
+  } 
   lcd.print(lcdbuf0);
   //lcd.print(h);
   int hbar = heightBar(h);
@@ -719,7 +866,7 @@ void lcd_interface(int v_adc, int loops) {
   readIndex = (readIndex + 1) % numReadings;
   float av = total / numReadings;
   hav = (int) av;
-  sprintf(lcdbuf1, "%02d-%02d Avg %02d", hlo, hhi, hav);
+  sprintf(lcdbuf1, "%02d-%02d  Av %02d", hlo, hhi, hav);
   lcd.setCursor(0, 1);
   lcd.print(lcdbuf1);
   int avbar = heightBar(hav);
@@ -743,13 +890,19 @@ void lcd_interface(int v_adc, int loops) {
   if (loops % 10 == 0 ) {
     if (nWarnLevel != LEVEL_NORMAL) {
       sprintf (lcdbuf1, "** %s: %02d **", msgPrefix[nWarnLevel], h);
-      for (int w = 0; w < 3; w++) {
-        lcd.setCursor(0, 1);
-        lcd.print(lcdbuf1);
-        delay(1000);
-        lcd.setCursor(0, 1);
-        lcd.print("                ");
-        delay(1000);
+      switch(nWarnLevel) {
+        case LEVEL_LOLO:
+        render_alarm(lcdbuf1, loloEnabled);
+        break;
+        case LEVEL_LO:
+        render_alarm(lcdbuf1, loEnabled);
+        break;
+        case LEVEL_HI:
+        render_alarm(lcdbuf1, hiEnabled);
+        break;
+        case LEVEL_HIHI:
+        render_alarm(lcdbuf1, hihiEnabled);
+        break;
       }
     }
   } else if (loops % 37 == 0) {
@@ -813,7 +966,12 @@ void setup() {
     lcd.print("GEM Water Meter");
     lcd.setCursor(0, 1);
     lcd.print("Initialising HW");
-    delay(1000);
+    delay(2000);
+    lcd.setCursor(0,1);
+    sprintf(lcdbuf1,  "Version : %s", release);
+    lcd.print(lcdbuf1);
+    delay(2000);
+/*
     for (int i = 0; i <= 16; i++) {
       lcd.scrollDisplayLeft();
       delay(SCROLL_DELAY);
@@ -823,6 +981,7 @@ void setup() {
       delay(SCROLL_DELAY);
     }
     delay(1000);
+    */
     lcd.clear();
   } // lcd_interface_enabled
 #endif
@@ -835,13 +994,19 @@ void setup() {
 
   serialHelp();
 
-  //Get trigger levels from EEPROM
+  //Get trigger levels and alarm configuration from EEPROM
 
-  tLoLo = readInt16 (0);
-  tLo = readInt16 (2);
-  tHi = readInt16 (4);
-  tHiHi = readInt16(6);
-  delay_time = readInt32(8);
+
+  tLoLo = readInt16 (EEPROM_OFFSET_TLOLO);
+  tLo = readInt16 (EEPROM_OFFSET_TLO);
+  tHi = readInt16 (EEPROM_OFFSET_THI);
+  tHiHi = readInt16(EEPROM_OFFSET_THIHI);
+  delay_time = readInt32(EEPROM_OFFSET_DELAY);
+  loloEnabled = readInt16(EEPROM_OFFSET_ELOLO);
+  loEnabled = readInt16(EEPROM_OFFSET_ELO);
+  hiEnabled = readInt16(EEPROM_OFFSET_EHI);
+  hihiEnabled = readInt16(EEPROM_OFFSET_EHIHI);
+
 #if DEBUG
   Serial.print ("tLoLo = ");
   Serial.println (tLoLo);
@@ -883,6 +1048,7 @@ void setup() {
 } // setup
 
 int v_adc;
+float sim_adc;
 int h_cm;
 
 void loop() {
@@ -890,6 +1056,17 @@ void loop() {
   loops++;
 
   v_adc = analogRead (A0);
+  if (simulation) {
+    // In cm -> m
+    sim_adc = (loops % LEVEL_CM_MAX_THRESHOLD) * 0.01;
+    // In kpa
+    sim_adc = (sim_adc * G_ACC * RHO_WATER)/1000.;
+    // As v_out
+    sim_adc = kpaToVout(sim_adc);
+    // As digital
+    v_adc = voutToDigital(sim_adc);
+  }
+
   h_cm = digitalToLevelCentimeters(v_adc);
 
   if (h_cm < tLoLo) {
@@ -904,6 +1081,7 @@ void loop() {
     nWarnLevel = LEVEL_HIHI;
   }
 
+/*
   if (trace) {
     Serial.print("Loop end : ");
     Serial.println(loops);
@@ -914,10 +1092,13 @@ void loop() {
     Serial.print("Time since reset : ");
     Serial.println(t_last);
   }
+  */
 
+#if LED_IF_ENABLED
   if (led_interface_enabled) {
     led_interface();
   }
+#endif
 
   if (lcd_interface_enabled) {
     lcd_interface(v_adc, loops);
