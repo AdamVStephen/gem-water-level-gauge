@@ -756,6 +756,9 @@ void lcd_interface(int v_adc, int loops) {
     sprintf(lcdbuf1, "%04d %02d:%02d     ", loops, uptimeHH, uptimeSS);
     lcd.print(lcdbuf1);
     delay(3000);
+    lcd.setCursor(0, 1);
+    lcd.print("                ");
+    delay(1000);
   } else if (loops %  1729 == 0) {
     lcd.setCursor(0, 1);
     lcd.print("1729 : Ramanujan");
@@ -766,10 +769,16 @@ void lcd_interface(int v_adc, int loops) {
     lcd.setCursor(0, 1);
     lcd.print("=9^3 + 10^3     ");
     delay(2000);
+    lcd.setCursor(0, 1);
+    lcd.print("                ");
+    delay(1000);
   } else if (loops % 4695 == 0) {
     lcd.setCursor(0, 1);
     lcd.print("HappyBoatingNick");
-    delay(2000);
+    delay(5000);
+    lcd.setCursor(0, 1);
+    lcd.print("                ");
+    delay(1000);
   }
 }
 
