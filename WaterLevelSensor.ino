@@ -627,7 +627,8 @@ byte level_08[8] = {31, 31, 31, 31, 31, 31, 31, 31};
      Display arithmetic
 */
 
-char topTitle[] = "H20 (cm) :";
+//char topTitle[] = "H20 (cm) :";
+char topTitle[] = "Water cm :";
 int topTitleLen = String(topTitle).length();
 
 int pressureBar(int d) {
