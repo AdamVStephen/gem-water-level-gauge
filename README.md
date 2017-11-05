@@ -4,8 +4,6 @@ as a display, and with a serial interface to change settings (persisted on the A
 
 Inspired by http://brelovich.se/2011/09/water-level-sensor-arduino-ethernet/ and a suggestion from Nick Balshaw.
 
-https://user-images.githubusercontent.com/7946632/32417570-6e03c588-c253-11e7-982e-26512eba2e6e.jpg
-
 ![gemfinalconstruction](https://user-images.githubusercontent.com/7946632/32417570-6e03c588-c253-11e7-982e-26512eba2e6e.jpg)
 
 # Operation
