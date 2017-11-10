@@ -1,12 +1,11 @@
 /**
-  WaterLevelSensor.ino, Adam Stephen, https://github.com/AdamVStephen/arduino
-  git clone git@github.com:AdamVStephen/arduino
+  WaterLevelSensor.ino, Adam Stephen, https://github.com/AdamVStephen/gem-water-level-gauge
 */
 
-char release[] = "1.3.0"; // TODO : git commit/release process to populate this field.
+char release[] = "1.4.0"; // TODO : git commit/release process to populate this field.
 
 // TODO: avoid memory writes if unnecessary.
-// Add a Serial 'z' : to zero the statistics.
+// TODO: Add a Serial command to zero the statistics.
 
 // Key constants
 // Stackoverflow discussion recommends const int or enum, and not #define
@@ -29,7 +28,7 @@ const int led_interface_enabled = LED_IF_ENABLED;
 const int lcd_interface_enabled = LCD_IF_ENABLED;
 const int udp_interface_enabled = UDP_IF_ENABLED;
 
-int loops;
+unsigned long loops;
 
 #if UDP_IF_ENABLED
 warblesnook();
@@ -156,8 +155,6 @@ warblesnook();
    10K resistor pot
    ends to +5V and ground
    wiper to LCD VO pin (pin 3 on LCD)
-
-
 */
 
 #include <Ethernet.h>
@@ -211,7 +208,19 @@ int32_t delay_time = 0;
 
 //Message prefixes
 char msgPrefix[5][7] = { "LOLO ", "LO ", "NORMAL", "HI", "HIHI" };
-byte nWarnLevel = 0;
+
+enum WarnLevel {
+  LEVEL_LOLO = 0,
+  LEVEL_LO = 1,
+  LEVEL_NORMAL = 2,
+  LEVEL_HI = 3,
+  LEVEL_HIHI = 4
+};
+
+WarnLevel nWarnLevel = LEVEL_NORMAL;
+
+/* 
+ *  TODO /Read/Write to EEProm mixed with non standard int type... cleanup
 
 enum AlarmStatus {
   ALARM_DISABLED = 0,
@@ -219,18 +228,19 @@ enum AlarmStatus {
   ALARM_FLASH = 2
 };
 
+AlarmStatus loloEnabled = ALARM_FLASH;
+AlarmStatus loEnabled = ALARM_FLASH;
+AlarmStatus hiEnabled = ALARM_FLASH;
+AlarmStatus hihiEnabled = ALARM_FLASH;
+*/
+#define ALARM_DISABLED 0
+#define ALARM_ASSERT 1
+#define ALARM_FLASH 2
+
 int loloEnabled = ALARM_FLASH;
 int loEnabled = ALARM_FLASH;
 int hiEnabled = ALARM_FLASH;
 int hihiEnabled = ALARM_FLASH;
-
-enum Warnlevel {
-  LEVEL_LOLO = 0,
-  LEVEL_LO = 1,
-  LEVEL_NORMAL = 2,
-  LEVEL_HI = 3,
-  LEVEL_HIHI = 4
-};
 
 //Character buffer and pointer(s) for Serial command parsing
 const int serialBufSize = 20;
@@ -777,7 +787,6 @@ int heightBar(int h) {
 char lcdbuf0[16];
 char lcdbuf1[16];
 
-
 void lcdHelp() {
   char buf[16] = "0123456789ABCEF";
   char * messages[] = {
@@ -789,6 +798,7 @@ void lcdHelp() {
   };
   for (int i = 0; i < 4; i++) {
     lcd.setCursor(0, 1);
+    // TODO: cleanup to suppress compiler warning: deprecated conversion from string constant to 'char *'
     lcd.print(messages[i]);
     delay(2000);
   }
@@ -809,7 +819,7 @@ int hav = 0;
 */
 char dbugbuf[50];
 
-void render_alarm(char * alarmtext, AlarmStatus status) {
+void render_alarm(char * alarmtext, int status) {
 
   if (status == ALARM_DISABLED) {
     return;
@@ -818,6 +828,7 @@ void render_alarm(char * alarmtext, AlarmStatus status) {
     lcd.print(alarmtext);
     delay(3000);
     lcd.setCursor(0, 1);
+    //lcd.print("0123456789012345");// Used to line up the 16 blanks below.
     lcd.print("                ");
     delay(1000);
   } else if (status == ALARM_FLASH) {
@@ -832,7 +843,7 @@ void render_alarm(char * alarmtext, AlarmStatus status) {
   }
 }
 
-void lcd_interface(int v_adc, int loops) {
+void lcd_interface(int v_adc, unsigned long loops) {
 
   int h = digitalToLevelCentimeters(v_adc);
   lcd.setCursor(0, 0);
@@ -876,10 +887,10 @@ void lcd_interface(int v_adc, int loops) {
   sprintf(serbuf, "Analogue value %d Bar %d", v_adc, avbar);
   Serial.println(serbuf);
 
-  int tms = millis();
-  int uptimeSS = tms / 1000;
-  int uptimeMM = uptimeSS % 60;
-  int uptimeHH = uptimeSS / 3600;
+  unsigned long tms = millis();
+  unsigned long uptimeSS = tms / 1000;
+  unsigned long uptimeMM = uptimeSS % 60;
+  unsigned long uptimeHH = uptimeSS / 3600;
 
   if (loops % 9 == 0) {
     if (trace) {
@@ -906,10 +917,16 @@ void lcd_interface(int v_adc, int loops) {
       }
     }
   } else if (loops % 37 == 0) {
+    lcd.setCursor(0, 0);
+    sprintf(lcdbuf1, "Uptime: %02d:%02d:%02d", uptimeHH, uptimeMM, uptimeSS);
+    lcd.print(lcdbuf1);
     lcd.setCursor(0, 1);
-    sprintf(lcdbuf1, "%04d %02d:%02d     ", loops, uptimeHH, uptimeSS);
+    sprintf(lcdbuf1, "Loop: %10d", loops);
     lcd.print(lcdbuf1);
     delay(3000);
+    delay(3000);
+    lcd.setCursor(0, 0);
+    lcd.print("                ");
     lcd.setCursor(0, 1);
     lcd.print("                ");
     delay(1000);
@@ -935,7 +952,6 @@ void lcd_interface(int v_adc, int loops) {
     delay(1000);
   }
 }
-
 
 #endif // LCD_IF_ENABLED
 
