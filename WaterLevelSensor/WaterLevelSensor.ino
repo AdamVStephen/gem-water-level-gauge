@@ -157,15 +157,22 @@ warblesnook();
    wiper to LCD VO pin (pin 3 on LCD)
 */
 
+#if UDP_IF_ENABLED
 #include <Ethernet.h>
 #include <EthernetServer.h>
 #include <EthernetUdp.h>
 #include <EthernetClient.h>
 #include <Dhcp.h>
 #include <Dns.h>
+#endif
+
 #include <SPI.h>         // needed for Arduino versions later than 0018
+
+#if UDP_IF_ENABLED
 #include <Ethernet.h>
 #include <Udp.h>         // UDP library from: bjoern@cs.stanford.edu 12/30/2008
+#endif
+
 #include <stdio.h>
 #include <EEPROM.h>           //We will read and write config from here
 #include <LiquidCrystal.h>
