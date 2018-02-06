@@ -2,7 +2,17 @@
   WaterLevelSensor.ino, Adam Stephen, https://github.com/AdamVStephen/gem-water-level-gauge
 */
 
-char release[] = "1.4.0"; // TODO : git commit/release process to populate this field.
+char release[] = "1.5.4"; // TODO : git commit/release process to populate this field.
+
+// V1.5 Addresses bug reports as follows :
+//
+// Uptime statistics appear invalid : minutes is never populated, seconds are not required.
+// Uptime loop counter rolls over to negative value.
+// Display bug revealed if water height exceeds 100 (i.e. 3 figures) : 
+// when the level drops back below 100 the trailing 0 is not overwritten until a display mode
+// change occurs.
+//
+// Min-Max display is of little value since it never resets
 
 // TODO: avoid memory writes if unnecessary.
 // TODO: Add a Serial command to zero the statistics.
@@ -793,6 +803,8 @@ int heightBar(int h) {
 
 char lcdbuf0[16];
 char lcdbuf1[16];
+// Guard
+//char lcdbuf2[16] = "----++++----++++";
 
 void lcdHelp() {
   char buf[16] = "0123456789ABCEF";
@@ -855,9 +867,9 @@ void lcd_interface(int v_adc, unsigned long loops) {
   int h = digitalToLevelCentimeters(v_adc);
   lcd.setCursor(0, 0);
   if (simulation) {
-    sprintf(lcdbuf0, "%s%02d", simTitle, h);
+    sprintf(lcdbuf0, "%s%3d", simTitle, h);
   } else {
-    sprintf(lcdbuf0, "%s%02d", topTitle, h);
+    sprintf(lcdbuf0, "%s%3d", topTitle, h);
   } 
   lcd.print(lcdbuf0);
   //lcd.print(h);
@@ -884,21 +896,27 @@ void lcd_interface(int v_adc, unsigned long loops) {
   readIndex = (readIndex + 1) % numReadings;
   float av = total / numReadings;
   hav = (int) av;
-  sprintf(lcdbuf1, "%02d-%02d  Av %02d", hlo, hhi, hav);
+  //sprintf(lcdbuf1, "%02d-%02d  Av %02d", hlo, hhi, hav);
+  sprintf(lcdbuf1, "Average  :%3d", hav);
   lcd.setCursor(0, 1);
   lcd.print(lcdbuf1);
   int avbar = heightBar(hav);
   lcd.setCursor(13, 1);
   lcd.write((byte)avbar);
 
-  sprintf(serbuf, "Analogue value %d Bar %d", v_adc, avbar);
+  sprintf(serbuf, "Analogue value %d Bar %d Loop %d", v_adc, avbar, loops);
   Serial.println(serbuf);
 
   unsigned long tms = millis();
-  unsigned long uptimeSS = tms / 1000;
-  unsigned long uptimeMM = uptimeSS % 60;
-  unsigned long uptimeHH = uptimeSS / 3600;
-
+  unsigned long tss = tms / 1000;
+  
+  unsigned long uptimeDD = tss / 86400;
+  int utdd = (int)uptimeDD;
+  unsigned long uptimeHH = (tss - uptimeDD*86400) / 3600;
+  int uthh = (int) uptimeHH;
+  unsigned long uptimeMM = (tss - uptimeDD*86400 - uptimeHH*3600)/60;
+  int utmm = (int) uptimeMM;
+  
   if (loops % 9 == 0) {
     if (trace) {
       lcdHelp();
@@ -924,19 +942,32 @@ void lcd_interface(int v_adc, unsigned long loops) {
       }
     }
   } else if (loops % 37 == 0) {
+    /*
+    sprintf(serbuf, "uptime DD %ld HH %ld MM %ld", uptimeDD, uptimeHH, uptimeMM);
+    Serial.println(serbuf);
+    sprintf(serbuf, "uptime DD %d HH %d MM %d", utdd,uthh,utmm);
+    Serial.println(serbuf);
+    sprintf(serbuf, "before calls lcdbuf2 is %s", lcdbuf2);
+    Serial.println(serbuf);
+    */
     lcd.setCursor(0, 0);
-    sprintf(lcdbuf1, "Uptime: %02d:%02d:%02d", uptimeHH, uptimeMM, uptimeSS);
+    sprintf(lcdbuf1, "Uptime %02d:%02d:%02d", uptimeDD, uptimeHH, uptimeMM);
     lcd.print(lcdbuf1);
     lcd.setCursor(0, 1);
-    sprintf(lcdbuf1, "Loop: %10d", loops);
+    sprintf(lcdbuf1, "Loop %10d", loops);
     lcd.print(lcdbuf1);
-    delay(3000);
+    /*
+    sprintf(serbuf, "after calls lcdbuf2 is %s", lcdbuf2);
+    Serial.println(serbuf);
+    */
     delay(3000);
     lcd.setCursor(0, 0);
     lcd.print("                ");
     lcd.setCursor(0, 1);
     lcd.print("                ");
     delay(1000);
+    //sprintf(serbuf, "uptime complete");
+    //Serial.println(serbuf);
   } else if (loops %  1729 == 0) {
     lcd.setCursor(0, 1);
     lcd.print("1729 : Ramanujan");
@@ -957,7 +988,13 @@ void lcd_interface(int v_adc, unsigned long loops) {
     lcd.setCursor(0, 1);
     lcd.print("                ");
     delay(1000);
+  } else {
+    // Nothing special.
   }
+
+  sprintf(serbuf, "lcd_update complete");
+  Serial.println(serbuf);
+
 }
 
 #endif // LCD_IF_ENABLED
