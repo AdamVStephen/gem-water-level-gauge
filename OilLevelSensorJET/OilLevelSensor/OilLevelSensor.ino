@@ -361,7 +361,7 @@ float kpaToJetOilLevelMeters(float kpa) {
 #define LIQUID_WATER 0
 #define LIQUID_JET_OIL 1
 
-int liquidMode = LIQUID_WATER;
+int liquidMode = LIQUID_JET_OIL;
 
 float kpaToLevelCentimeters(float kpa) {
   if (liquidMode == LIQUID_WATER) {
@@ -814,60 +814,6 @@ void lcd_interface(int v_adc, unsigned long loops, int button_action) {
   sprintf(serbuf, "Uptime %ld %ld %ld", uptimeDD, uptimeHH, uptimeMM);
   Serial.println(serbuf);
 
-  if (button_action == ACTION_HELP) {
-      lcdHelp();
-  }
-  
-  if (loops % 10 == 0 ) {
-    if (nWarnLevel != LEVEL_NORMAL) {
-      sprintf (lcdbuf1, "** %s: %02d **", msgPrefix[nWarnLevel], h);
-      switch (nWarnLevel) {
-        case LEVEL_LOLO:
-          render_alarm(lcdbuf1, loloEnabled);
-          break;
-        case LEVEL_LO:
-          render_alarm(lcdbuf1, loEnabled);
-          break;
-        case LEVEL_HI:
-          render_alarm(lcdbuf1, hiEnabled);
-          break;
-        case LEVEL_HIHI:
-          render_alarm(lcdbuf1, hihiEnabled);
-          break;
-      }
-    }
-  } else if (button_action == ACTION_UPTIME) {
-    /*
-      sprintf(serbuf, "uptime DD %ld HH %ld MM %ld", uptimeDD, uptimeHH, uptimeMM);
-      Serial.println(serbuf);
-      sprintf(serbuf, "uptime DD %d HH %d MM %d", utdd,uthh,utmm);
-      Serial.println(serbuf);
-      sprintf(serbuf, "before calls lcdbuf2 is %s", lcdbuf2);
-      Serial.println(serbuf);
-    */
-
-    lcd.setCursor(0, 0);
-    sprintf(lcdbuf1, "Uptime %02d:%02d:%02d", (int)uptimeDD, (int)uptimeHH, (int)uptimeMM);
-    lcd.print(lcdbuf1);
-    lcd.setCursor(0, 1);
-    sprintf(lcdbuf1, "Loop %10d", loops);
-    lcd.print(lcdbuf1);
-    /*
-      sprintf(serbuf, "after calls lcdbuf2 is %s", lcdbuf2);
-      Serial.println(serbuf);
-    */
-    delay(3000);
-    lcd.setCursor(0, 0);
-    lcd.print("                ");
-    lcd.setCursor(0, 1);
-    lcd.print("                ");
-    delay(1000);
-    //sprintf(serbuf, "uptime complete");
-    //Serial.println(serbuf);
-  } else {
-    // Nothing special.
-  }
-
   sprintf(serbuf, "lcd_update complete");
   Serial.println(serbuf);
 
@@ -1089,9 +1035,9 @@ void loop() {
   if (button == btnSELECT) {
      simulation = 1 - simulation;
   } else if (button == btnLEFT) {
-    liquidMode = LIQUID_WATER;
+  //    liquidMode = LIQUID_WATER;
   } else if (button == btnRIGHT) {
-    liquidMode = LIQUID_JET_OIL;
+  //    liquidMode = LIQUID_JET_OIL;
   } else if (button == btnUP) {
     button_action = ACTION_HELP;
   } else if (button == btnDOWN) {
