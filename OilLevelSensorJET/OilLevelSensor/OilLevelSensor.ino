@@ -1,11 +1,11 @@
 /**
   OilLevelSensor.ino, Adam Stephen, https://github.com/AdamVStephen/gem-water-level-gauge
-  *
-  * TODO: Migrate the repo to more general : "gem-level-gauge".
-  * TODO: Document tank limits for the pressure sensor as a function of density.
+
+    TODO: Migrate the repo to more general : "gem-level-gauge".
+    TODO: Document tank limits for the pressure sensor as a function of density.
 */
 
-char release[] = "1.6"; // TODO : git commit/release process to populate this field.
+char release[] = "1.8"; // TODO : git commit/release process to populate this field.
 
 // V1.0 Derived from WaterLevelSensor 1.5.6, stripped down, reconfigured for LCD Shield pinout and JET oil level density.
 
@@ -20,6 +20,10 @@ enum Config {
   LEVEL_CM_MIN_THRESHOLD = 0,
   MAX_DELAY_MS = 1000000
 };
+
+
+int h_background = 0;
+int background_loops = 20;
 
 #define LED_IF_ENABLED 0
 #define LCD_IF_ENABLED 1
@@ -650,7 +654,9 @@ byte level_08[8] = {31, 31, 31, 31, 31, 31, 31, 31};
 //char topTitle[] = "H20 (cm) :";
 // Title Strings must all have the same length, or adapt the character handling code.
 char topTitleWater[]  = "Water cm :";
-char topTitleJetOil[] = "Level cm :";
+char topTitleJetOil[] =            "Level cm :";
+char topTitleJetOilCalibrating[] = "Calibrate:";
+
 char simTitle[] = "SimMode  :";
 int topTitleLen = String(topTitleWater).length();
 
@@ -738,20 +744,26 @@ unsigned long elapsed;
 #define ACTION_HELP 314
 #define ACTION_UPTIME 271
 
+#define MODE_CALIBRATING 1
+#define MODE_CALIBRATED 2
+int mode = MODE_CALIBRATING;
+
 void lcd_interface(int v_adc, unsigned long loops, int button_action) {
+
 
   int h = digitalToLevelCentimeters(v_adc);
   lcd.setCursor(0, 0);
-  if (simulation) {
-    sprintf(lcdbuf0, "%s%3d", simTitle, h);
+
+  if (mode == MODE_CALIBRATING) {
+    sprintf(lcdbuf0, "%s%3d", topTitleJetOilCalibrating, background_loops);
+
   } else {
-    if (liquidMode == LIQUID_WATER) {
-    sprintf(lcdbuf0, "%s%3d", topTitleWater, h);
-    } else if (liquidMode == LIQUID_JET_OIL) {
+    // Apply offset correction.
+    h = h - h_background;
     sprintf(lcdbuf0, "%s%3d", topTitleJetOil, h);
-      
-    }
+
   }
+
   lcd.print(lcdbuf0);
   //lcd.print(h);
   int hbar = heightBar(h);
@@ -777,6 +789,16 @@ void lcd_interface(int v_adc, unsigned long loops, int button_action) {
   readIndex = (readIndex + 1) % numReadings;
   float av = total / numReadings;
   hav = (int) av;
+  
+  if (mode == MODE_CALIBRATING) {
+    if (background_loops >= 0) {
+      background_loops--;
+    } else {
+      h_background = hav;
+      mode = MODE_CALIBRATED;
+    }
+  }
+
   //sprintf(lcdbuf1, "%02d-%02d  Av %02d", hlo, hhi, hav);
   sprintf(lcdbuf1, "Average  :%3d", hav);
   lcd.setCursor(0, 1);
@@ -788,17 +810,14 @@ void lcd_interface(int v_adc, unsigned long loops, int button_action) {
   sprintf(serbuf, "Analogue value %d Bar %d Loop %d", v_adc, avbar, loops);
   Serial.println(serbuf);
 
-  if (simulation) {
-    tms = millis() + ((86400 * 2) + (3600 * 15) + (42 * 60)) * 1000;
-  } else {
-    tms = millis();
-  }
+  tms = millis();
 
   if (tms > tms_prev) {
     uts += (tms - tms_prev) / 1000.;
   } else {
     uts += (tms_prev - tms) / 1000.;
   }
+
   elapsed = (unsigned long) uts;
   uptimeDD = (elapsed / 86400);
   residual = elapsed - (uptimeDD * 86400);
@@ -925,7 +944,7 @@ void setup_gem() {
   } // led_interface_enabled
 #endif
 
-  loops = 4695 - 30;
+  //loops = 4695 - 30;
 
 } // setup
 
@@ -962,23 +981,6 @@ void setup() {
 #endif
   //
 
-  //serialHelp();
-
-  //Get trigger levels and alarm configuration from EEPROM
-
-  /*
-    tLoLo = readInt16 (EEPROM_OFFSET_TLOLO);
-    tLo = readInt16 (EEPROM_OFFSET_TLO);
-    tHi = readInt16 (EEPROM_OFFSET_THI);
-    tHiHi = readInt16(EEPROM_OFFSET_THIHI);
-    delay_time = readInt32(EEPROM_OFFSET_DELAY);
-    loloEnabled = readInt16(EEPROM_OFFSET_ELOLO);
-    loEnabled = readInt16(EEPROM_OFFSET_ELO);
-    hiEnabled = readInt16(EEPROM_OFFSET_EHI);
-    hihiEnabled = readInt16(EEPROM_OFFSET_EHIHI);
-  */
-
-
   if (delay_time < 1000) {
     delay_time = 1000;
   }
@@ -990,6 +992,8 @@ void setup() {
 } // setup
 
 int v_adc;
+
+
 float sim_adc;
 int h_cm;
 
@@ -1002,24 +1006,24 @@ int h_cm;
 
 int adc_key_in;
 
-int read_LCD_buttons(){               // read the buttons
-    adc_key_in = analogRead(0);       // read the value from the sensor 
+int read_LCD_buttons() {              // read the buttons
+  adc_key_in = analogRead(0);       // read the value from the sensor
 
-    // my buttons when read are centered at these valies: 0, 144, 329, 504, 741
-    // we add approx 50 to those values and check to see if we are close
-    // We make this the 1st option for speed reasons since it will be the most likely result
+  // my buttons when read are centered at these valies: 0, 144, 329, 504, 741
+  // we add approx 50 to those values and check to see if we are close
+  // We make this the 1st option for speed reasons since it will be the most likely result
 
-    if (adc_key_in > 1000) return btnNONE; 
+  if (adc_key_in > 1000) return btnNONE;
 
-   // For V1.0 comment the other threshold and use the one below:
-   
-     if (adc_key_in < 50)   return btnRIGHT;  
-     if (adc_key_in < 195)  return btnUP; 
-     if (adc_key_in < 380)  return btnDOWN; 
-     if (adc_key_in < 555)  return btnLEFT; 
-     if (adc_key_in < 790)  return btnSELECT;     
+  // For V1.0 comment the other threshold and use the one below:
 
-    return btnNONE;                // when all others fail, return this.
+  if (adc_key_in < 50)   return btnRIGHT;
+  if (adc_key_in < 195)  return btnUP;
+  if (adc_key_in < 380)  return btnDOWN;
+  if (adc_key_in < 555)  return btnLEFT;
+  if (adc_key_in < 790)  return btnSELECT;
+
+  return btnNONE;                // when all others fail, return this.
 }
 
 void loop() {
@@ -1033,33 +1037,19 @@ void loop() {
   int button_action = ACTION_NONE;
 
   if (button == btnSELECT) {
-     simulation = 1 - simulation;
+    simulation = 1 - simulation;
   } else if (button == btnLEFT) {
-  //    liquidMode = LIQUID_WATER;
+    //    liquidMode = LIQUID_WATER;
   } else if (button == btnRIGHT) {
-  //    liquidMode = LIQUID_JET_OIL;
+    //    liquidMode = LIQUID_JET_OIL;
   } else if (button == btnUP) {
     button_action = ACTION_HELP;
   } else if (button == btnDOWN) {
     button_action = ACTION_UPTIME;
   }
-  
-  if (simulation) {
-    // In cm -> m
-    sim_adc = (loops % LEVEL_CM_MAX_THRESHOLD) * 0.01;
-    // In kpa
-    if (liquidMode == LIQUID_WATER) {
-      sim_adc = (sim_adc * G_ACC * RHO_WATER) / 1000.;
-    } else if (liquidMode == LIQUID_JET_OIL) {
-      sim_adc = (sim_adc * G_ACC * RHO_JET_OIL) / 1000.;
-    }
-    // As v_out
-    sim_adc = kpaToVout(sim_adc);
-    // As digital
-    v_adc = voutToDigital(sim_adc);
-  }
 
-    h_cm = digitalToLevelCentimeters(v_adc);
+
+  h_cm = digitalToLevelCentimeters(v_adc);
 
 
   if (h_cm < tLoLo) {
